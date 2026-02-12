@@ -1,7 +1,7 @@
 from joblib import Parallel, delayed
 from types import SimpleNamespace
-from run import run_ga
 
+from run import run_ga
 
 if __name__ == "__main__":
 
@@ -14,11 +14,12 @@ if __name__ == "__main__":
         "cross_style": "cols",
         "n_trials": 1000,
         "input_nodes": 0,
-        "output_nodes": 0,
-        "order": None,
-        "task": None,
+        "output_nodes": 0, 
+        "noise": 0.05,
+        "order": 10,
+        "task": "narma",
         "max_size": 200,
-        "metric": "lmc", 
+        "metric": None, 
         "n_states": 3,
         "output_file": "fitness.db",
         "num_jobs": total_runs,

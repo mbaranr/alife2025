@@ -4,10 +4,12 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from multiset import FrozenMultiset
-from scipy.sparse.csgraph import connected_components
-from wrapt_timeout_decorator.wrapt_timeout_decorator import timeout
+
 import graph_tool.all as gt
+from scipy.sparse.csgraph import connected_components
+
+from multiset import FrozenMultiset
+from wrapt_timeout_decorator.wrapt_timeout_decorator import timeout
 
 
 class GraphDef(object):
@@ -32,16 +34,36 @@ class GraphDef(object):
         else:
             return 0 # or could do np.nan?
     
-    def get_neighbourhood(self) -> np.ndarray:
+    def get_neighbourhood(self, noise: float = 0.0) -> np.ndarray:
         """
-        Returns matrix G
-        Each row of G gives the neighbourhood information vector of one node in the graph
+        noise interpreted as exploration rate in [0,1]:
+        - with probability `noise`, each existing edge is dropped
+        - with probability `noise * density`, each non-edge is added (roughly keeps scale reasonable)
         """
-        c_in = self.A.T @ self.S  # N x S
-        c_out = self.A @ self.S   # N x S
-        G = np.hstack([self.S, c_in, c_out])  # N x 3S
-        out = G / np.max(np.abs(G), axis=1, keepdims=True)
-        return out
+        A = self.A
+
+        if noise > 0:
+            # work on a perturbed adjacency copy
+            A = A.copy().astype(np.int8)
+            n = A.shape[0]
+
+            # drop existing edges
+            drop_mask = (A == 1) & (np.random.random((n, n)) < noise)
+            A[drop_mask] = 0
+
+            # add some non-edges (scaled so it doesn't explode in dense graphs)
+            density = A.mean() if n > 0 else 0.0
+            add_p = noise * density
+            add_mask = (A == 0) & (np.random.random((n, n)) < add_p)
+            A[add_mask] = 1
+
+        c_in = A.T @ self.S
+        c_out = A @ self.S
+        G = np.hstack([self.S, c_in, c_out])
+
+        row_max = np.max(np.abs(G), axis=1, keepdims=True)
+        row_max[row_max == 0] = 1.0
+        return G / row_max
     
     def to_edgelist(self) -> np.ndarray:
         """

@@ -3,17 +3,20 @@
 
 
 import os
-import logging
-import sqlite3
 import copy
+import logging
 import jsonpickle
+
+import sqlite3
 import numpy as np
 from tqdm import tqdm
-from grow.dgca import DGCA
-from grow.reservoir import Reservoir
-from evolve.fitness import ReservoirFitness
+
 from multiprocessing import Lock
+from evolve.fitness import ReservoirFitness
+
+from grow.dgca import DGCA
 from grow.runner import Runner
+from grow.reservoir import Reservoir
 
 
 class Chromosome:
@@ -145,8 +148,8 @@ class Chromosome:
    
 
 class EvolvableDGCA(DGCA):
-    def __init__(self, n_states, hidden_size=None):
-        super().__init__(n_states=n_states, hidden_size=hidden_size)
+    def __init__(self, n_states, hidden_size=None, noise: float=0.0):
+        super().__init__(n_states=n_states, hidden_size=hidden_size, noise=noise)
 
     def set_chromosomes(self, chr_action: Chromosome, chr_state: Chromosome):
         self.action_mlp.set_parameters(chr_action.weights, chr_action.biases)

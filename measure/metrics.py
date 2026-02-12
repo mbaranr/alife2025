@@ -7,7 +7,7 @@ def spectral_radius(res: Reservoir):
     return max(abs(eigenvalues))
 
 
-def effective_rank(singular_values: np.ndarray, threshold: float = 0.99) -> int:
+def _effective_rank(singular_values: np.ndarray, threshold: float = 0.99) -> int:
     """
     Computes the number of singular values required to 
     capture the specified percentage of the total sum.
@@ -24,6 +24,7 @@ def effective_rank(singular_values: np.ndarray, threshold: float = 0.99) -> int:
             break
     return e_rank
 
+
 def kernel_rank(res: Reservoir, 
                 num_timesteps: int=2000):
     """
@@ -39,7 +40,7 @@ def kernel_rank(res: Reservoir,
 
     state = res.reservoir_state[:, res.washout:]
     s = np.linalg.svd(state, compute_uv=False)
-    return effective_rank(s)
+    return _effective_rank(s)
     
 
 def generalization_rank(res: Reservoir, 
@@ -55,7 +56,7 @@ def generalization_rank(res: Reservoir,
 
     state = res.reservoir_state[:, res.washout:]
     s = np.linalg.svd(state, compute_uv=False)
-    return effective_rank(s)
+    return _effective_rank(s)
 
 ###### memory capacity ######
 

@@ -15,6 +15,7 @@ def narmax(order: int, num_timesteps: int=2000, discard: int=20):
     y = y[discard:]
     return u.T, y.T
 
+
 def santa_fe(num_timesteps: int=2000, discard: int=20):
     """
     Creates NARMA-X sequence for t timesteps, where X is the order of the system.

@@ -17,6 +17,7 @@ def stable_sigmoid(x):
         np.exp(x) / (1 + np.exp(x))
     )
 
+
 def onehot(x: np.ndarray):
     """
     Helper function to on hot encode an array x.
@@ -76,17 +77,19 @@ class DGCA(object):
     Q_N = [[0,0], 
         [0,1]]
 
-    def __init__(self, hidden_size=None, n_states: int=None):
+    def __init__(self, hidden_size=None, n_states: int=None, noise: float=0.0):
         if not n_states:
             return
         self.action_mlp = MLP(layer_sizes=[3 * n_states, hidden_size, 15] if hidden_size else [3 * n_states, 15])   # action MLP
         self.state_mlp = MLP(layer_sizes=[3 * n_states, n_states] if hidden_size else [3 * n_states, n_states])     # state SLP
-    
+        
+        self.noise = noise
+
     def update_action(self, res: Reservoir):
         """
         First MLP.
         """
-        G = res.get_neighbourhood()
+        G = res.get_neighbourhood(noise=self.noise)
         D = self.action_mlp.forward(G)   # N x 15
 
         # one hot in sections
@@ -131,7 +134,7 @@ class DGCA(object):
         """
         Second SLP.
         """
-        G = res.get_neighbourhood()
+        G = res.get_neighbourhood(noise=self.noise)
         D = self.state_mlp.forward(G)  # N x S
         return Reservoir(res.A, onehot(D), res.input_nodes, res.output_nodes)
 

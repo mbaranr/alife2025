@@ -4,7 +4,7 @@ from measure.tasks import *
 from measure.metrics import *
 
 
-NRMSE = lambda y, y_fit: np.mean(((y - y_fit) ** 2) / np.var(y))
+NRMSE = lambda y, y_fit: np.sqrt(np.mean((y - y_fit) ** 2) / np.var(y))
 
 
 class ReservoirFitness:

@@ -1,4 +1,5 @@
 *.pyc
 data/
 .DS_Store
-analysis/
+analyse/
+.venv/

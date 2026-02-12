@@ -1,10 +1,13 @@
 import argparse
 from types import SimpleNamespace
+
+from measure.tasks import narmax, santa_fe
+
 from grow.runner import Runner
 from grow.reservoir import get_seed
+
 from evolve.fitness import TaskFitness, MetricFitness
 from evolve.mga import ChromosomalMGA, EvolvableDGCA
-from measure.tasks import narmax, santa_fe
 
 
 def run_ga(run_id, args):
@@ -14,7 +17,7 @@ def run_ga(run_id, args):
     print(f"Starting GA run {run_id}...")
 
     conditions = {'max_size': args.max_size, 
-                  'min_size': args.input_nodes+args.output_nodes+20, 
+                  'min_size': args.input_nodes+args.output_nodes+ (10 if not args.order else args.order), 
                 #   "io_path": True
                   }
 
@@ -30,7 +33,7 @@ def run_ga(run_id, args):
                                    verbose=False)
 
     reservoir = get_seed(args.input_nodes, args.output_nodes, args.n_states)
-    model = EvolvableDGCA(n_states=reservoir.n_states, hidden_size=64)
+    model = EvolvableDGCA(n_states=reservoir.n_states, hidden_size=64, noise=args.noise)
     runner = Runner(max_steps=100, max_size=300)
 
     mga = ChromosomalMGA(popsize=args.pop_size,
@@ -40,7 +43,7 @@ def run_ga(run_id, args):
                         fitness_fn=fitness_fn,
                         mutate_rate=args.mutate_rate,
                         cross_rate=args.cross_rate,
-                        run_id=run_id,  
+                        run_id=run_id,
                         n_trials=args.n_trials,
                         cross_style=args.cross_style,
                         db_file=args.output_file,
@@ -62,6 +65,7 @@ if __name__ == "__main__":
         "n_trials": 1000,
         "input_nodes": 0,
         "output_nodes": 0,
+        "noise": .0,
         "order": None,
         "task": None,
         "max_size": 200,

@@ -1,10 +1,14 @@
-import numpy as np  
+import json
 import warnings
-import graph_tool.all as gt
-from grow.graph import GraphDef
-from scipy.sparse.csgraph import connected_components
-from sklearn.linear_model import BayesianRidge
+
+import numpy as np  
 import matplotlib.pyplot as plt
+from sklearn.linear_model import BayesianRidge
+
+import graph_tool.all as gt
+from scipy.sparse.csgraph import connected_components
+
+from grow.graph import GraphDef
 
 
 POLARITY_MATRIX = np.array([
@@ -12,6 +16,7 @@ POLARITY_MATRIX = np.array([
     [-1, 1, 1],  # state_from 1
     [1, -1, 1]   # state_from 2
 ])
+
 
 # activation functions
 def linear(x):
@@ -383,5 +388,86 @@ class Reservoir(GraphDef):
     
     def copy(self):
         return Reservoir(np.copy(self.A), np.copy(self.S), self.input_nodes, self.output_nodes)
+
+    @classmethod
+    def from_json(cls, payload) -> 'Reservoir':
+        """
+        Reconstruct a Reservoir from the jsonpickle payload stored in SQLite logs.
+
+        Accepts either a JSON string (the raw database value) or a dict.  The
+        method is tolerant to historical module names (e.g. ``grow.reservoir_new``)
+        because it rebuilds the object from the stored fields instead of
+        importing the original class.
+        """
+
+        if isinstance(payload, cls):
+            return payload.copy()
+
+        # Best-effort direct decode in case the module path matches.
+        if isinstance(payload, (str, bytes)):
+            raw = payload.decode() if isinstance(payload, bytes) else payload
+            try:
+                import jsonpickle  # optional dependency
+                decoded = jsonpickle.decode(raw)
+                if isinstance(decoded, cls):
+                    return decoded
+            except Exception:
+                pass
+            try:
+                data = json.loads(raw)
+            except Exception as exc:
+                raise ValueError("Could not parse reservoir JSON payload") from exc
+        elif isinstance(payload, dict):
+            data = payload
+        else:
+            raise TypeError("Reservoir.from_json expects a JSON string or dict")
+
+        if 'A' not in data or 'S' not in data:
+            raise ValueError("Reservoir JSON must contain adjacency 'A' and state 'S'")
+
+        def _decode_array(obj):
+            if obj is None:
+                return None
+            if isinstance(obj, np.ndarray):
+                return obj
+            # Try jsonpickle if available (handles py/reduce format for ndarrays)
+            if isinstance(obj, dict):
+                try:
+                    import jsonpickle  # optional
+                    from jsonpickle.unpickler import Unpickler
+                    arr = Unpickler().restore(obj)
+                    if isinstance(arr, np.ndarray):
+                        return arr
+                except Exception:
+                    pass  # fall back to numpy conversion below
+            try:
+                return np.array(obj)
+            except Exception as exc:
+                raise TypeError("Could not decode array from JSON payload") from exc
+
+        A = _decode_array(data['A'])
+        S = _decode_array(data['S'])
+
+        res = cls(
+            A,
+            S,
+            input_nodes=data.get('input_nodes', 0),
+            output_nodes=data.get('output_nodes', 0),
+            input_units=data.get('input_units', 1),
+            output_units=data.get('output_units', 1),
+            input_gain=data.get('input_gain', 0.1),
+            feedback_gain=data.get('feedback_gain', 0.95),
+            washout=data.get('washout', 20),
+        )
+
+        # Optional learned weights/state snapshots
+        if 'w_in' in data:
+            res.w_in = _decode_array(data['w_in'])
+        if 'w_out' in data:
+            res.w_out = _decode_array(data['w_out'])
+        if 'reservoir_state' in data:
+            res.reservoir_state = _decode_array(data['reservoir_state'])
+
+        return res
 
     
