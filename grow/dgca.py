@@ -140,11 +140,8 @@ class DGCA(object):
 
     def step(self, res: Reservoir):
         """
-        Pass through both MLPs. 
+        Pass through both MLPs.
         """
         pre = self.update_action(res)
         post = self.update_state(pre)
         return post
-
-
-

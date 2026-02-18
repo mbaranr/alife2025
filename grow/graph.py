@@ -34,7 +34,7 @@ class GraphDef(object):
         else:
             return 0 # or could do np.nan?
     
-    def get_neighbourhood(self, noise: float = 0.0) -> np.ndarray:
+    def get_neighbourhood(self, noise: float=0.0) -> np.ndarray:
         """
         noise interpreted as exploration rate in [0,1]:
         - with probability `noise`, each existing edge is dropped
@@ -51,7 +51,6 @@ class GraphDef(object):
             drop_mask = (A == 1) & (np.random.random((n, n)) < noise)
             A[drop_mask] = 0
 
-            # add some non-edges (scaled so it doesn't explode in dense graphs)
             density = A.mean() if n > 0 else 0.0
             add_p = noise * density
             add_mask = (A == 0) & (np.random.random((n, n)) < add_p)

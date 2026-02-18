@@ -1,4 +1,5 @@
 import json
+import jsonpickle
 import warnings
 
 import numpy as np  
@@ -124,53 +125,84 @@ class Reservoir(GraphDef):
         super().__init__(A, S)
         self.input_nodes = input_nodes  # number of fixed I/O nodes
         self.output_nodes = output_nodes 
+
         self.input_units = input_units
         self.output_units = output_units
+
         self.input_gain = input_gain
         self.feedback_gain = feedback_gain
         self.washout = washout
+        
+        self.node_importance = None
+
         self.reset()
 
-    def _pp(self, 
-           g: gt.Graph, 
-           pos: gt.VertexPropertyMap = None) -> gt.VertexPropertyMap:
+    def _pp(
+        self,
+        g: gt.Graph,
+        pos: gt.VertexPropertyMap = None,
+    ) -> gt.VertexPropertyMap:
         """
-        Pretty prints the input/output nodes.
-        Handles positioning of nodes, ensuring consistent spacing for I/O nodes
-        and dynamic layout for other nodes. Also adjusts the outlines of I/O nodes.
+        Pretty prints the graph.
+
+        If `importance` is provided (values in [0,1]), node fill colors are mapped
+        directly using the given colormap. Otherwise uses state-based coloring.
         """
-        # assign colors based on states
-        states_1d = self.states_1d()
-        cmap = plt.get_cmap('gray', self.n_states + 1)
-        state_colors = cmap(states_1d)
-        g.vp['plot_color'] = g.new_vertex_property('vector<double>', state_colors)
-        
+
+        n = self.size()
+
+        # vertex fill colors
+        if self.node_importance is not None:
+            imp = np.asarray(self.node_importance, dtype=float)
+            
+            # clamp defensively to [0,1]
+            imp = np.clip(imp, 0.0, 1.0)
+
+            cmap = plt.get_cmap("coolwarm")
+            colors = cmap(imp)  # Nx4 RGBA
+
+            plot_color = g.new_vertex_property("vector<double>")
+            for i, v in enumerate(g.vertices()):
+                plot_color[v] = colors[i]
+
+            g.vp["plot_color"] = plot_color
+
+        else:
+            states_1d = self.states_1d()
+            cmap = plt.get_cmap("gray", self.n_states + 1)
+            colors = cmap(states_1d)
+
+            plot_color = g.new_vertex_property("vector<double>")
+            for i, v in enumerate(g.vertices()):
+                plot_color[v] = colors[i]
+
+            g.vp["plot_color"] = plot_color
+
         # determine I/O nodes
-        input_nodes = list(range(self.input_nodes)) if self.input_nodes > 0 else []
-        output_nodes = list(range(self.input_nodes, self.input_nodes+self.output_nodes)) if self.output_nodes > 0 else []
+        input_nodes = list(range(self.input_nodes))
+        output_nodes = list(range(self.input_nodes, self.input_nodes + self.output_nodes))
         other_nodes = [v for v in g.vertices() if int(v) not in input_nodes + output_nodes]
 
-        # use sfdp_layout for the general layout
+        # layout
         other_pos = gt.sfdp_layout(g, pos=pos)
 
-        # initialize vertex measure
         outline_color = g.new_vertex_property("vector<double>")
-        pos = g.new_vertex_property("vector<double>")
+        pos_prop = g.new_vertex_property("vector<double>")
 
-        # outline colors
         for v in other_nodes:
-            outline_color[v] = [0, 0, 0, 0]     # transparent
-        for i, v in enumerate(input_nodes):
-            outline_color[v] = [1, 0, 0, 0.8]   # red
-        for i, v in enumerate(output_nodes):
-            outline_color[v] = [0, 0, 1, 0.8]   # blue
+            outline_color[v] = [0, 0, 0, 0]
 
-        # position
+        for v in input_nodes:
+            outline_color[g.vertex(v)] = [1, 0, 0, 0.8]
+
+        for v in output_nodes:
+            outline_color[g.vertex(v)] = [0, 0, 1, 0.8]
+
         if input_nodes and output_nodes:
 
-            # if both are present, special layout
             x_min, x_max = float("inf"), float("-inf")
             y_min, y_max = float("inf"), float("-inf")
+
             for v in other_nodes:
                 x, y = other_pos[v]
                 x_min = min(x_min, x)
@@ -178,44 +210,50 @@ class Reservoir(GraphDef):
                 y_min = min(y_min, y)
                 y_max = max(y_max, y)
 
-            # handle case where y_min == y_max, probably only one node
             if y_min == y_max:
                 y_min -= 1
                 y_max += 1
 
-            # dynamic offsets
-            input_x = x_min - 2.0  # left
-            output_x = x_max + 2.0  # right
-            spacing = max(abs(y_max - y_min) / max(len(input_nodes), len(output_nodes)), 1.0)  # vertical spacing
+            input_x = x_min - 2.0
+            output_x = x_max + 2.0
 
-            # center nodes vertically around graph middle
+            spacing = max(abs(y_max - y_min) / max(len(input_nodes), len(output_nodes)), 1.0)
+
             center_y = (y_min + y_max) / 2.0
+
             total_height_input = spacing * (len(input_nodes) - 1)
             total_height_output = spacing * (len(output_nodes) - 1)
 
-            # assign positions and outline colors for input/output nodes
             for i, v in enumerate(input_nodes):
-                pos[g.vertex(v)] = (input_x, center_y - total_height_input / 2 + i * spacing)
+                pos_prop[g.vertex(v)] = (
+                    input_x,
+                    center_y - total_height_input / 2 + i * spacing,
+                )
+
             for i, v in enumerate(output_nodes):
-                pos[g.vertex(v)] = (output_x, center_y - total_height_output / 2 + i * spacing)
-            for i, v in enumerate(other_nodes):
-                pos[v] = other_pos[v]
+                pos_prop[g.vertex(v)] = (
+                    output_x,
+                    center_y - total_height_output / 2 + i * spacing,
+                )
+
+            for v in other_nodes:
+                pos_prop[v] = other_pos[v]
+
         else:
             for v in g.vertices():
-                pos[v] = other_pos[v]
+                pos_prop[v] = other_pos[v]
 
         # edge colors
         edge_colors = g.new_edge_property("vector<double>")
-        for e in g.edges():
-            weight = g.ep.wgt[e]  # Assuming weights are stored as edge property 'wgt'
-            if weight > 0:
-                edge_colors[e] = [0, 0, 0, 1]  # Black for positive weights
-            else:
-                edge_colors[e] = [1, 0, 0, 1]  # Red for negative weights
 
-        g.vp['outline_color'] = outline_color
-        g.vp['pos'] = pos
-        g.ep['edge_color'] = edge_colors
+        for e in g.edges():
+            edge_colors[e] = [0, 0, 0, 1] if g.ep.wgt[e] > 0 else [1, 0, 0, 1]
+
+        g.vp["outline_color"] = outline_color
+        g.vp["pos"] = pos_prop
+        g.ep["edge_color"] = edge_colors
+
+        return pos_prop
     
     def io_path(self) -> bool:
         """
@@ -386,88 +424,99 @@ class Reservoir(GraphDef):
         out_A[np.eye(out_A.shape[0], dtype=np.bool_)] = 0 
         return Reservoir(out_A, np.copy(self.S), self.input_nodes, self.output_nodes)
     
+    def prune(self, idx: int) -> "Reservoir":
+        """
+        Returns a copy of the reservoir with node `idx` removed.
+        """
+        n = self.size()
+        if idx < 0 or idx >= n:
+            raise IndexError(f"Node index {idx} out of range [0, {n-1}]")
+
+        # mask selecting all nodes except idx
+        mask = np.ones(n, dtype=bool)
+        mask[idx] = False
+
+        # prune adjacency and state matrices
+        A_new = self.A[mask][:, mask]
+        S_new = self.S[mask]
+
+        # update I/O bookkeeping
+        input_nodes = self.input_nodes
+        output_nodes = self.output_nodes
+
+        if idx < self.input_nodes:
+            input_nodes -= 1
+
+        elif self.input_nodes <= idx < (self.input_nodes + self.output_nodes):
+            output_nodes -= 1
+
+        pruned = Reservoir(
+            A_new,
+            S_new,
+            input_nodes=input_nodes,
+            output_nodes=output_nodes,
+            input_units=self.input_units,
+            output_units=self.output_units,
+            input_gain=self.input_gain,
+            feedback_gain=self.feedback_gain,
+            washout=self.washout,
+        )
+
+        return pruned
+
     def copy(self):
         return Reservoir(np.copy(self.A), np.copy(self.S), self.input_nodes, self.output_nodes)
 
     @classmethod
-    def from_json(cls, payload) -> 'Reservoir':
+    def from_json(cls, payload) -> "Reservoir":
         """
-        Reconstruct a Reservoir from the jsonpickle payload stored in SQLite logs.
+        Reconstruct a Reservoir from a jsonpickle payload.
 
-        Accepts either a JSON string (the raw database value) or a dict.  The
-        method is tolerant to historical module names (e.g. ``grow.reservoir_new``)
-        because it rebuilds the object from the stored fields instead of
-        importing the original class.
+        Accepts:
+        - Reservoir instance
+        - JSON string/bytes produced by jsonpickle
+        - dict (already loaded), possibly containing jsonpickle-encoded ndarrays
         """
+        if isinstance(payload, cls):
+            return payload.copy()
+
+        if isinstance(payload, (str, bytes)):
+            raw = payload.decode() if isinstance(payload, bytes) else payload
+            payload = jsonpickle.decode(raw)
 
         if isinstance(payload, cls):
             return payload.copy()
 
-        # Best-effort direct decode in case the module path matches.
-        if isinstance(payload, (str, bytes)):
-            raw = payload.decode() if isinstance(payload, bytes) else payload
-            try:
-                import jsonpickle  # optional dependency
-                decoded = jsonpickle.decode(raw)
-                if isinstance(decoded, cls):
-                    return decoded
-            except Exception:
-                pass
-            try:
-                data = json.loads(raw)
-            except Exception as exc:
-                raise ValueError("Could not parse reservoir JSON payload") from exc
-        elif isinstance(payload, dict):
-            data = payload
-        else:
-            raise TypeError("Reservoir.from_json expects a JSON string or dict")
+        if not isinstance(payload, dict):
+            raise TypeError("Reservoir.from_json expects a Reservoir, json string/bytes, or dict")
 
-        if 'A' not in data or 'S' not in data:
-            raise ValueError("Reservoir JSON must contain adjacency 'A' and state 'S'")
+        unpickler = jsonpickle.unpickler.Unpickler()
 
-        def _decode_array(obj):
-            if obj is None:
-                return None
-            if isinstance(obj, np.ndarray):
-                return obj
-            # Try jsonpickle if available (handles py/reduce format for ndarrays)
-            if isinstance(obj, dict):
-                try:
-                    import jsonpickle  # optional
-                    from jsonpickle.unpickler import Unpickler
-                    arr = Unpickler().restore(obj)
-                    if isinstance(arr, np.ndarray):
-                        return arr
-                except Exception:
-                    pass  # fall back to numpy conversion below
-            try:
-                return np.array(obj)
-            except Exception as exc:
-                raise TypeError("Could not decode array from JSON payload") from exc
+        def restore_array(x):
+            # if jsonpickle left an ndarray in dict form, restore it.
+            if isinstance(x, dict):
+                x = unpickler.restore(x)
+            # ensure numpy array (covers lists)
+            if not isinstance(x, np.ndarray):
+                x = np.asarray(x)
+            return x
 
-        A = _decode_array(data['A'])
-        S = _decode_array(data['S'])
+        if "A" not in payload or "S" not in payload:
+            raise ValueError("Reservoir JSON must contain 'A' and 'S'")
+
+        A = restore_array(payload["A"])
+        S = restore_array(payload["S"])
 
         res = cls(
             A,
             S,
-            input_nodes=data.get('input_nodes', 0),
-            output_nodes=data.get('output_nodes', 0),
-            input_units=data.get('input_units', 1),
-            output_units=data.get('output_units', 1),
-            input_gain=data.get('input_gain', 0.1),
-            feedback_gain=data.get('feedback_gain', 0.95),
-            washout=data.get('washout', 20),
+            input_nodes=payload.get("input_nodes", 0),
+            output_nodes=payload.get("output_nodes", 0),
+            input_units=payload.get("input_units", 1),
+            output_units=payload.get("output_units", 1),
+            input_gain=payload.get("input_gain", 0.1),
+            feedback_gain=payload.get("feedback_gain", 0.95),
+            washout=payload.get("washout", 20),
         )
 
-        # Optional learned weights/state snapshots
-        if 'w_in' in data:
-            res.w_in = _decode_array(data['w_in'])
-        if 'w_out' in data:
-            res.w_out = _decode_array(data['w_out'])
-        if 'reservoir_state' in data:
-            res.reservoir_state = _decode_array(data['reservoir_state'])
-
         return res
-
-    

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=dgca_run_%A_%a  # Job name
-#SBATCH --output=logs/slurm/run_%A_%a.out
-#SBATCH --error=logs/slurm/run_%A_%a.err   
+#SBATCH --output=logs/run_%A_%a.out
+#SBATCH --error=logs/run_%A_%a.err   
 #SBATCH --array=0-149%10  # 150 runs, max 10 at a time
 #SBATCH --ntasks=1
 #SBATCH --constraint=avx2

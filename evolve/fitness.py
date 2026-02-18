@@ -1,10 +1,12 @@
 import numpy as np
+
 from grow.reservoir import Reservoir, check_conditions
+
 from measure.tasks import *
 from measure.metrics import *
 
 
-NRMSE = lambda y, y_fit: np.sqrt(np.mean((y - y_fit) ** 2) / np.var(y))
+NMSE = lambda y, y_fit: np.mean((y - y_fit) ** 2) / np.var(y)
 
 
 class ReservoirFitness:
@@ -50,6 +52,7 @@ class TaskFitness(ReservoirFitness):
 
     def __call__(self, res: Reservoir) -> float:
         res_ = self._prepare_reservoir(res)
+
         if res_ is None:
             return np.nan
 
@@ -58,7 +61,12 @@ class TaskFitness(ReservoirFitness):
             self.input, self.target = self._generate_series()
             res_.reset()
             predictions = res_.bipolar().train(self.input, target=self.target)
-            err = np.nan if predictions is None else min(NRMSE(self.target[:, res.washout:], predictions), 1)
+
+            try:
+                err = min(NMSE(self.target[:, res.washout:], predictions), 1)
+            except Exception as _:
+                err = np.nan
+
             errors.append(err)
 
         valid_errors = [e for e in errors if not np.isnan(e)]
