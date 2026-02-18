@@ -242,13 +242,14 @@ class ChromosomalMGA:
             self.runner.reset()
             final_res = self.runner.run(self.model, self.seed_graph)
             f = float(self.fitness_fn(final_res))
+            # if one of the reps returns NaN, treat the whole individual's fitness as NaN
+            if np.isnan(f):
+                return np.nan
+            
             fitnesses.append(f)
             reservoirs.append(final_res)
 
-        if np.all(np.isnan(fitnesses)):
-            avg_fitness = float("nan")
-        else:
-            avg_fitness = float(np.nanmean(fitnesses))
+        avg_fitness = float(np.mean(fitnesses))
 
         # chromosome cache based on avg_fitness
         for chr in chromosomes:
@@ -256,7 +257,7 @@ class ChromosomalMGA:
                 chr.best_fitness = avg_fitness
 
         # update global best-of-run based on avg_fitness; store all per-rep artifacts
-        if not np.isnan(avg_fitness) and self.better(avg_fitness, self.best["avg_fitness"]):
+        if self.better(avg_fitness, self.best["avg_fitness"]):
             self.best["avg_fitness"] = avg_fitness
             self.best["fitnesses"] = [float(x) for x in fitnesses]
             self.best["reservoirs"] = [r.copy() for r in reservoirs]

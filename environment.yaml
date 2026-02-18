@@ -13,6 +13,7 @@ dependencies:
   - plotnine
   - networkx
   - jsonpickle
+  - parallel
   - pip:
     - wrapt_timeout_decorator
     - multiset
